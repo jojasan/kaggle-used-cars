@@ -259,3 +259,246 @@ def simplify_high_cardinality_column(df, target_column, related_column, top_n=40
     return simplified_column
 
 
+# =============================================================================
+# FEATURE ENGINEERING HELPERS FOR MODELING PIPELINE
+# =============================================================================
+
+import datetime as dt
+from sklearn.preprocessing import FunctionTransformer
+
+# Current year for age calculations
+CURRENT_YEAR = dt.date.today().year
+
+
+def year_to_age(x, *, current_year=CURRENT_YEAR):
+    """Convert model-year → age in years."""
+    return current_year - x
+
+
+def age_odometer_product(X, *, current_year=CURRENT_YEAR):
+    """
+    X has two columns: [year, odometer].
+    Returns one column: (age * odometer).
+    Works whether X is a DataFrame or an ndarray.
+    """
+    if hasattr(X, "to_numpy"):                 # pandas -> ndarray
+        X = X.to_numpy()
+
+    yr, odo = X[:, 0], X[:, 1]
+    age = current_year - yr
+    return (age * odo).reshape(-1, 1)
+
+
+# Pre-configured function transformers
+age_transformer = FunctionTransformer(
+    year_to_age,
+    feature_names_out='one-to-one'
+)
+
+age_odometer_transformer = FunctionTransformer(
+    age_odometer_product,
+    feature_names_out=lambda _: ['age*odometer']
+)
+
+
+# =============================================================================
+# MODEL TRAINING HELPERS
+# =============================================================================
+
+import numpy as np
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import mean_squared_error
+
+
+def fit_gridsearch_pipeline(pipeline, param_grid, X_train, y_train, cv=3, verbose=False):
+    """
+    Fit a GridSearchCV pipeline and print results.
+    
+    Parameters:
+    -----------
+    pipeline : sklearn.pipeline.Pipeline
+        The pipeline to optimize
+    param_grid : dict
+        Parameter grid for GridSearchCV
+    X_train : array-like
+        Training features
+    y_train : array-like
+        Training target
+    cv : int, default=3
+        Number of cross-validation folds
+    verbose : bool, default=False
+        Whether to print detailed information
+    
+    Returns:
+    --------
+    GridSearchCV : The fitted GridSearchCV object
+    """
+    
+    if verbose:
+        print("Starting GridSearchCV hyperparameter search...")
+        
+        # Print parameter grid details
+        for param_name, param_values in param_grid.items():
+            param_display_name = param_name.replace('__', ' ').replace('_', ' ').title()
+            print(f"Testing {len(param_values)} {param_display_name} values: {param_values}")
+        
+        total_combinations = np.prod([len(values) for values in param_grid.values()])
+        print(f"Total combinations: {total_combinations}")
+        print(f"Using sample size: {len(X_train)} for hyperparameter tuning")
+        print("\nFitting GridSearchCV...")
+    
+    # Perform GridSearchCV
+    grid_search = GridSearchCV(
+        estimator=pipeline,
+        param_grid=param_grid,
+        cv=cv,
+        scoring='neg_mean_squared_error',
+        n_jobs=-1,
+        verbose=1 if verbose else 0
+    )
+    
+    # Fit the model
+    grid_search.fit(X_train, y_train)
+    
+    # Calculate RMSE for basic output
+    y_pred = grid_search.predict(X_train)
+    sample_rmse = np.sqrt(mean_squared_error(y_train, y_pred))
+    
+    if verbose:
+        print("GridSearchCV completed!")
+        
+        # Print best parameters
+        best_params = grid_search.best_params_
+        print(f"\nBest parameters found:")
+        for param_name, param_value in best_params.items():
+            param_display_name = param_name.replace('__', ' ').replace('_', ' ').title()
+            print(f"  {param_display_name}: {param_value}")
+    else:
+        # Simple output similar to pipeline1
+        print("Training completed successfully!")
+        
+        # Extract and display all best parameters
+        best_params = grid_search.best_params_
+        for param_name, param_value in best_params.items():
+            param_display_name = param_name.replace('__', ' ').replace('_', ' ').title()
+            print(f"Best {param_display_name} selected by GridSearchCV: {param_value}")
+    
+    print(f"Sample RMSE: ${sample_rmse:,.2f}")
+    
+    return grid_search
+
+
+def visualize_gridsearch_results(grid_search, figsize=(10, 6), title="GridSearchCV Performance", 
+                                 score_type="RMSE", cmap='viridis_r'):
+    """
+    Create a heatmap visualization of GridSearchCV results across parameter grid.
+    
+    Parameters:
+    -----------
+    grid_search : GridSearchCV
+        Fitted GridSearchCV object
+    figsize : tuple, default=(10, 6)
+        Figure size for the plot
+    title : str, default="GridSearchCV Performance"
+        Title for the heatmap
+    score_type : str, default="RMSE"
+        Type of score to display ("RMSE" converts from negative MSE)
+    cmap : str, default='viridis_r'
+        Colormap for the heatmap (reversed viridis so darker = better)
+    
+    Returns:
+    --------
+    dict : Dictionary containing performance statistics
+    """
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    
+    # Extract GridSearchCV results
+    results_df = pd.DataFrame(grid_search.cv_results_)
+    
+    # Get parameter names (remove 'param_' prefix)
+    param_columns = [col for col in results_df.columns if col.startswith('param_')]
+    
+    if len(param_columns) != 2:
+        print(f"Warning: This function is designed for 2-parameter grids. Found {len(param_columns)} parameters.")
+        print(f"Parameters: {[col.replace('param_', '') for col in param_columns]}")
+        return None
+    
+    # Create pivot table for heatmap
+    param1, param2 = param_columns[0], param_columns[1]
+    pivot_table = results_df.pivot_table(
+        values='mean_test_score', 
+        index=param1, 
+        columns=param2
+    )
+    
+    # Convert scores if needed
+    if score_type.upper() == "RMSE":
+        # Convert negative MSE to positive RMSE
+        pivot_table_display = np.sqrt(-pivot_table)
+        score_label = 'RMSE ($)'
+        fmt = '.0f'
+    else:
+        pivot_table_display = pivot_table
+        score_label = score_type
+        fmt = '.4f'
+    
+    # Create the heatmap
+    plt.figure(figsize=figsize)
+    sns.heatmap(
+        pivot_table_display, 
+        annot=True, 
+        fmt=fmt,
+        cmap=cmap,
+        cbar_kws={'label': score_label}
+    )
+    
+    # Clean up parameter names for labels
+    param1_clean = param1.replace('param_', '').replace('__', ' ').replace('_', ' ').title()
+    param2_clean = param2.replace('param_', '').replace('__', ' ').replace('_', ' ').title()
+    
+    plt.title(f'{title}: {score_type} Across Parameter Grid')
+    plt.xlabel(param2_clean)
+    plt.ylabel(param1_clean)
+    plt.tight_layout()
+    plt.show()
+    
+    # Calculate and print statistics
+    print(f"\nBest parameter combination:")
+    best_params = grid_search.best_params_
+    for param_name, param_value in best_params.items():
+        param_display_name = param_name.replace('__', ' ').replace('_', ' ').title()
+        print(f"  {param_display_name}: {param_value}")
+    
+    if score_type.upper() == "RMSE":
+        best_score = np.sqrt(-grid_search.best_score_)
+        print(f"  Best CV {score_type}: ${best_score:,.2f}")
+        
+        # Show performance range
+        min_score = pivot_table_display.min().min()
+        max_score = pivot_table_display.max().max()
+        print(f"\nPerformance range:")
+        print(f"  Best {score_type}: ${min_score:,.2f}")
+        print(f"  Worst {score_type}: ${max_score:,.2f}")
+        print(f"  Improvement: ${max_score - min_score:,.2f} ({((max_score - min_score) / max_score * 100):.1f}%)")
+    else:
+        print(f"  Best CV {score_type}: {grid_search.best_score_:.4f}")
+        
+        # Show performance range  
+        min_score = pivot_table_display.min().min()
+        max_score = pivot_table_display.max().max()
+        print(f"\nPerformance range:")
+        print(f"  Best {score_type}: {min_score:.4f}")
+        print(f"  Worst {score_type}: {max_score:.4f}")
+        print(f"  Range: {max_score - min_score:.4f}")
+    
+    # Return statistics
+    return {
+        'best_params': grid_search.best_params_,
+        'best_score': grid_search.best_score_,
+        'pivot_table': pivot_table_display,
+        'param_names': [param1_clean, param2_clean]
+    }
+
+
