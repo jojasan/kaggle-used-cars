@@ -1,7 +1,16 @@
+# Core numerics
+numpy          # newest stable that scikit-learn 1.6.x supports
+scipy          # matches numpy 1.26.x
+
+# Data handling & viz
 pandas
-numpy
 matplotlib
 seaborn
-scikit-learn
-scipy
+
+# ML stack
+scikit-learn            # 1.4 ≤ version < 1.7 is required for sklearn-intelex 2025.5
+# scikit-learn-intelex # pulls the matching daal4py build
+# daal4py              # listed explicitly for clarity; same version as intelex
+
+# Stats / econometrics
 statsmodels
