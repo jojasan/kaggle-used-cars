@@ -297,7 +297,7 @@ age_transformer = FunctionTransformer(
 
 age_odometer_transformer = FunctionTransformer(
     age_odometer_product,
-    feature_names_out=lambda _: ['age*odometer']
+    feature_names_out=lambda transformer, input_features: ['age*odometer']
 )
 
 
@@ -502,3 +502,372 @@ def visualize_gridsearch_results(grid_search, figsize=(10, 6), title="GridSearch
     }
 
 
+# =============================================================================
+# HOLDOUT EVALUATION HELPERS
+# =============================================================================
+
+from sklearn.metrics import mean_absolute_error, r2_score
+
+def calculate_metrics(y_true, y_pred, model_name):
+    """
+    Calculate performance metrics for a model.
+    
+    Parameters:
+    -----------
+    y_true : array-like
+        True target values
+    y_pred : array-like  
+        Predicted target values
+    model_name : str
+        Name of the model for identification
+    
+    Returns:
+    --------
+    dict : Dictionary containing model performance metrics
+    """
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    mae = mean_absolute_error(y_true, y_pred)
+    r2 = r2_score(y_true, y_pred)
+    
+    return {
+        'Model': model_name,
+        'RMSE': rmse,
+        'MAE': mae,
+        'R²': r2
+    }
+
+
+def display_holdout_evaluation_results(y_test, y_pred1, y_pred2, pipeline1, pipeline2, 
+                                       model1_name="Pipeline 1 (Ridge)", 
+                                       model2_name="Pipeline 2 (Lasso→Ridge)",
+                                       X_test_sample=None):
+    """
+    Display comprehensive holdout evaluation results comparing two models.
+    
+    Parameters:
+    -----------
+    y_test : array-like
+        True test set target values
+    y_pred1 : array-like
+        Predictions from first model
+    y_pred2 : array-like
+        Predictions from second model
+    pipeline1 : sklearn.pipeline.Pipeline
+        First trained pipeline
+    pipeline2 : sklearn.pipeline.Pipeline
+        Second trained pipeline
+    model1_name : str, default="Pipeline 1 (Ridge)"
+        Name for first model
+    model2_name : str, default="Pipeline 2 (Lasso→Ridge)"
+        Name for second model
+    X_test_sample : array-like, optional
+        Sample of test features for feature analysis (uses first row if not provided)
+    
+    Returns:
+    --------
+    pandas.DataFrame : DataFrame containing the metrics comparison
+    """
+    import pandas as pd
+    
+    print("Evaluating models on holdout test set...\n")
+    
+    # Calculate metrics for both models
+    metrics1 = calculate_metrics(y_test, y_pred1, model1_name)
+    metrics2 = calculate_metrics(y_test, y_pred2, model2_name)
+    
+    # Display results
+    results_df = pd.DataFrame([metrics1, metrics2])
+    print("📊 HOLDOUT TEST SET PERFORMANCE")
+    print("=" * 50)
+    print(f"{'Model':<25} {'RMSE':<12} {'MAE':<12} {'R²':<8}")
+    print("-" * 50)
+    for _, row in results_df.iterrows():
+        print(f"{row['Model']:<25} ${row['RMSE']:<11,.0f} ${row['MAE']:<11,.0f} {row['R²']:<8.4f}")
+
+    print("\n🏆 MODEL COMPARISON")
+    print("=" * 30)
+    rmse_diff = metrics1['RMSE'] - metrics2['RMSE']
+    mae_diff = metrics1['MAE'] - metrics2['MAE']
+    r2_diff = metrics2['R²'] - metrics1['R²']  # Higher R² is better
+
+    if rmse_diff > 0:
+        winner = model2_name.split()[0] + " " + model2_name.split()[1]  # Extract "Pipeline 2"
+        rmse_improvement = f"${rmse_diff:,.0f} better RMSE"
+    else:
+        winner = model1_name.split()[0] + " " + model1_name.split()[1]  # Extract "Pipeline 1"
+        rmse_improvement = f"${abs(rmse_diff):,.0f} better RMSE"
+
+    print(f"Best RMSE: {winner} ({rmse_improvement})")
+    print(f"MAE difference: ${mae_diff:+,.0f} ({model1_name.split()[0]} {model1_name.split()[1]} vs {model2_name.split()[0]} {model2_name.split()[1]})")
+    print(f"R² difference: {r2_diff:+.4f} ({model2_name.split()[0]} {model2_name.split()[1]} vs {model1_name.split()[0]} {model1_name.split()[1]})")
+
+    # Additional insights
+    print(f"\n📈 PERFORMANCE INSIGHTS")
+    print("=" * 30)
+    avg_price = y_test.mean()
+    print(f"Average test set price: ${avg_price:,.0f}")
+    print(f"{model1_name.split()[0]} {model1_name.split()[1]} RMSE as % of avg price: {(metrics1['RMSE']/avg_price)*100:.2f}%")
+    print(f"{model2_name.split()[0]} {model2_name.split()[1]} RMSE as % of avg price: {(metrics2['RMSE']/avg_price)*100:.2f}%")
+
+    # Check if feature selection made a difference
+    if X_test_sample is None:
+        # Use a small sample for feature analysis if not provided
+        X_test_sample = y_test.head(1) if hasattr(y_test, 'head') else [y_test[0]]
+        
+    try:
+        n_features_original = pipeline1.named_steps['preprocessor'].transform(X_test_sample).shape[1]
+        
+        if 'selector' in pipeline2.named_steps:
+            n_features_selected = pipeline2.named_steps['selector'].transform(
+                pipeline2.named_steps['preprocessor'].transform(X_test_sample)
+            ).shape[1]
+            
+            print(f"\n🔍 FEATURE SELECTION ANALYSIS")
+            print("=" * 35)
+            print(f"Original features: {n_features_original:,}")
+            print(f"Selected features: {n_features_selected:,}")
+            print(f"Features removed: {n_features_original - n_features_selected:,} ({((n_features_original - n_features_selected)/n_features_original)*100:.1f}%)")
+        else:
+            print(f"\n🔍 FEATURE ANALYSIS")
+            print("=" * 20)
+            print(f"Total features used: {n_features_original:,}")
+            
+    except Exception as e:
+        print(f"\n⚠️  Feature analysis could not be completed: {str(e)}")
+    
+    return results_df
+
+
+def get_feature_importance(pipeline, model_name, top_n=15):
+    """
+    Extract and rank feature importance from trained pipeline
+    """
+    print(f"\n🔍 Analyzing {model_name} Feature Importance...")
+    
+    # Get feature names from preprocessor
+    feature_names = pipeline.named_steps['preprocessor'].get_feature_names_out()
+    
+    if 'selector' in pipeline.named_steps:
+        # For Pipeline 2: get selected features and their coefficients
+        selector = pipeline.named_steps['selector']
+        selected_features_mask = selector.get_support()
+        selected_feature_names = feature_names[selected_features_mask]
+        coefficients = pipeline.named_steps['model'].coef_
+        
+        # Create feature importance dataframe
+        importance_df = pd.DataFrame({
+            'Feature': selected_feature_names,
+            'Coefficient': coefficients,
+            'Abs_Coefficient': np.abs(coefficients)
+        })
+        
+        print(f"  ✓ Features after selection: {len(selected_feature_names):,} (from {len(feature_names):,})")
+        
+    else:
+        # For Pipeline 1: all features and their coefficients
+        coefficients = pipeline.named_steps['model'].coef_
+        
+        # Create feature importance dataframe
+        importance_df = pd.DataFrame({
+            'Feature': feature_names,
+            'Coefficient': coefficients,
+            'Abs_Coefficient': np.abs(coefficients)
+        })
+        
+        print(f"  ✓ Total features: {len(feature_names):,}")
+    
+    # Sort by absolute coefficient value and get top N
+    importance_df = importance_df.sort_values('Abs_Coefficient', ascending=False)
+    top_features = importance_df.head(top_n).copy()
+    
+    print(f"  ✓ Top {top_n} most important features identified")
+    
+    return top_features, importance_df
+
+
+def display_feature_importance_comparison(pipeline1_top, pipeline2_top, model1_name, model2_name, top_n=15):
+    """
+    Displays side-by-side feature importance and provides a comparison.
+    """
+    
+    def display_top_features_table(features_df, model_name, top_n):
+        """Helper to print a formatted table of top features."""
+        print(f"\n🏆 {model_name} - Top {top_n} Features:")
+        print("-" * 50)
+        print(f"{'Rank':<4} {'Feature':<35} {'Coefficient':<12} {'Abs Value':<10}")
+        print("-" * 50)
+        for i, (_, row) in enumerate(features_df.iterrows(), 1):
+            print(f"{i:<4} {row['Feature'][:34]:<35} {row['Coefficient']:<12.2f} {row['Abs_Coefficient']:<10.2f}")
+
+    print(f"\n" + "="*60)
+    print(f"TOP {top_n} MOST IMPORTANT FEATURES")
+    print("="*60)
+    
+    display_top_features_table(pipeline1_top, model1_name, top_n)
+    display_top_features_table(pipeline2_top, model2_name, top_n)
+
+    # Compare overlap between top features
+    pipeline1_top_features = set(pipeline1_top['Feature'].tolist())
+    pipeline2_top_features = set(pipeline2_top['Feature'].tolist())
+    common_features = pipeline1_top_features.intersection(pipeline2_top_features)
+    unique_to_p1 = pipeline1_top_features - pipeline2_top_features
+    unique_to_p2 = pipeline2_top_features - pipeline1_top_features
+
+    print(f"\n📊 TOP FEATURES COMPARISON")
+    print("="*40)
+    print(f"Features in both top {top_n}: {len(common_features)} ({len(common_features)/top_n*100:.1f}%)")
+    print(f"Unique to {model1_name}: {len(unique_to_p1)}")
+    print(f"Unique to {model2_name}: {len(unique_to_p2)}")
+
+    if common_features:
+        print(f"\nCommon important features:")
+        for feature in sorted(common_features):
+            print(f"  • {feature}")
+
+
+# Analyze feature types in top features
+def analyze_feature_types(top_features_df, model_name):
+    feature_types = {
+        'Age-related': 0,
+        'Odometer-related': 0, 
+        'Manufacturer': 0,
+        'Model': 0,
+        'Condition': 0,
+        'Type': 0,
+        'Other': 0
+    }
+    
+    for feature in top_features_df['Feature']:
+        if 'age' in feature.lower():
+            feature_types['Age-related'] += 1
+        elif 'odometer' in feature.lower():
+            feature_types['Odometer-related'] += 1
+        elif 'manufacturer' in feature.lower():
+            feature_types['Manufacturer'] += 1
+        elif 'model' in feature.lower():
+            feature_types['Model'] += 1
+        elif 'condition' in feature.lower():
+            feature_types['Condition'] += 1
+        elif 'type' in feature.lower():
+            feature_types['Type'] += 1
+        else:
+            feature_types['Other'] += 1
+    
+    print(f"\n{model_name} feature categories:")
+    for category, count in feature_types.items():
+        if count > 0:
+            print(f"  {category}: {count}")
+
+
+def display_comprehensive_feature_analysis(pipeline1_top, pipeline2_top, pipeline1_all, pipeline2_all,
+                                            model1_name="Pipeline 1 (Ridge)", 
+                                            model2_name="Pipeline 2 (Lasso→Ridge)", 
+                                            top_n=15):
+    """
+    Display comprehensive feature importance analysis for two pipelines including:
+    - Top N features for each model in formatted tables
+    - Overlap comparison between models
+    - Feature insights and categorization
+    - Key insights and summary
+    
+    Parameters:
+    -----------
+    pipeline1_top : pandas.DataFrame
+        Top N features from pipeline 1 with columns: Feature, Coefficient, Abs_Coefficient
+    pipeline2_top : pandas.DataFrame
+        Top N features from pipeline 2 with columns: Feature, Coefficient, Abs_Coefficient  
+    pipeline1_all : pandas.DataFrame
+        All features from pipeline 1
+    pipeline2_all : pandas.DataFrame
+        All features from pipeline 2
+    model1_name : str, default="Pipeline 1 (Ridge)"
+        Name for first model
+    model2_name : str, default="Pipeline 2 (Lasso→Ridge)"
+        Name for second model
+    top_n : int, default=15
+        Number of top features to display and analyze
+    """
+    
+    print(f"\n" + "="*60)
+    print(f"TOP {top_n} MOST IMPORTANT FEATURES")
+    print("="*60)
+
+    # Display Pipeline 1 top features
+    print(f"\n🏆 {model1_name} - Top {top_n} Features:")
+    print("-" * 50)
+    print(f"{'Rank':<4} {'Feature':<35} {'Coefficient':<12} {'Abs Value':<10}")
+    print("-" * 50)
+    for i, (_, row) in enumerate(pipeline1_top.iterrows(), 1):
+        print(f"{i:<4} {row['Feature'][:34]:<35} {row['Coefficient']:<12.2f} {row['Abs_Coefficient']:<10.2f}")
+
+    # Display Pipeline 2 top features
+    print(f"\n🏆 {model2_name} - Top {top_n} Features:")
+    print("-" * 50)
+    print(f"{'Rank':<4} {'Feature':<35} {'Coefficient':<12} {'Abs Value':<10}")
+    print("-" * 50)
+    for i, (_, row) in enumerate(pipeline2_top.iterrows(), 1):
+        print(f"{i:<4} {row['Feature'][:34]:<35} {row['Coefficient']:<12.2f} {row['Abs_Coefficient']:<10.2f}")
+
+    # Compare overlap between top features
+    pipeline1_top_features = set(pipeline1_top['Feature'].tolist())
+    pipeline2_top_features = set(pipeline2_top['Feature'].tolist())
+    common_features = pipeline1_top_features.intersection(pipeline2_top_features)
+    unique_to_p1 = pipeline1_top_features - pipeline2_top_features
+    unique_to_p2 = pipeline2_top_features - pipeline1_top_features
+
+    print(f"\n📊 TOP FEATURES COMPARISON")
+    print("="*40)
+    print(f"Features in both top {top_n}: {len(common_features)} ({len(common_features)/top_n*100:.1f}%)")
+    print(f"Unique to {model1_name.split()[0]} {model1_name.split()[1]}: {len(unique_to_p1)}")
+    print(f"Unique to {model2_name.split()[0]} {model2_name.split()[1]}: {len(unique_to_p2)}")
+
+    if common_features:
+        print(f"\nCommon important features:")
+        for feature in sorted(common_features):
+            print(f"  • {feature}")
+
+    print(f"\n💡 FEATURE INSIGHTS")
+    print("="*30)
+
+    analyze_feature_types(pipeline1_top, model1_name.split()[0] + " " + model1_name.split()[1])
+    analyze_feature_types(pipeline2_top, model2_name.split()[0] + " " + model2_name.split()[1])
+    
+    # Key insights summary
+    print(f"\n🎯 KEY INSIGHTS")
+    print("="*20)
+    print(f"• Both models agree on {len(common_features)} out of {top_n} most important features")
+    print(f"• Feature selection (Lasso) reduced features by {((len(pipeline1_all) - len(pipeline2_all))/len(pipeline1_all))*100:.1f}%")
+    print(f"• The most important feature in {model1_name.split()[0]} {model1_name.split()[1]}: '{pipeline1_top.iloc[0]['Feature'][:50]}{'...' if len(pipeline1_top.iloc[0]['Feature']) > 50 else ''}'")
+    print(f"• The most important feature in {model2_name.split()[0]} {model2_name.split()[1]}: '{pipeline2_top.iloc[0]['Feature'][:50]}{'...' if len(pipeline2_top.iloc[0]['Feature']) > 50 else ''}'")
+
+    # Show coefficient magnitude comparison
+    p1_max_coeff = pipeline1_top['Abs_Coefficient'].max()
+    p2_max_coeff = pipeline2_top['Abs_Coefficient'].max()
+    print(f"• Largest coefficient magnitude - {model1_name.split()[0]} {model1_name.split()[1]}: {p1_max_coeff:.2f}, {model2_name.split()[0]} {model2_name.split()[1]}: {p2_max_coeff:.2f}")
+
+    # Summary of what drives predictions
+    print(f"\n🚗 WHAT DRIVES CAR PRICE PREDICTIONS:")
+    print("="*40)
+
+    # Extract and summarize most important feature types
+    important_categories = []
+    for feature in pipeline1_top.head(5)['Feature']:
+        if 'manufacturer' in feature.lower():
+            important_categories.append("Vehicle Manufacturer")
+        elif 'model' in feature.lower():
+            important_categories.append("Vehicle Model")
+        elif 'age' in feature.lower():
+            important_categories.append("Vehicle Age")
+        elif 'odometer' in feature.lower():
+            important_categories.append("Mileage/Usage")
+        elif 'condition' in feature.lower():
+            important_categories.append("Vehicle Condition")
+        elif 'type' in feature.lower():
+            important_categories.append("Vehicle Type")
+
+    # Remove duplicates while preserving order
+    unique_categories = list(dict.fromkeys(important_categories))
+    for i, category in enumerate(unique_categories[:3], 1):
+        print(f"{i}. {category}")
+
+    print("\nBoth models consistently identify these factors as the primary drivers of vehicle pricing.")
