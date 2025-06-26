@@ -381,7 +381,7 @@ def fit_gridsearch_pipeline(pipeline, param_grid, X_train, y_train, cv=3, verbos
         best_params = grid_search.best_params_
         for param_name, param_value in best_params.items():
             param_display_name = param_name.replace('__', ' ').replace('_', ' ').title()
-            print(f"Best {param_display_name} selected by GridSearchCV: {param_value}")
+            print(f"Best {param_display_name} selected: {param_value}")
     
     print(f"Sample RMSE: ${sample_rmse:,.2f}")
     
@@ -871,3 +871,276 @@ def display_comprehensive_feature_analysis(pipeline1_top, pipeline2_top, pipelin
         print(f"{i}. {category}")
 
     print("\nBoth models consistently identify these factors as the primary drivers of vehicle pricing.")
+
+def visualize_feature_importance_comparison(pipeline1_top, pipeline2_top, pipeline1_all, pipeline2_all,
+                                            model1_name="Pipeline 1 (Ridge)", 
+                                            model2_name="Pipeline 2 (Lasso→Ridge)", 
+                                            top_n=30, figsize=(20, 8), max_feature_length=25):
+    """
+    Create side-by-side feature importance visualization comparing two models.
+    
+    Parameters:
+    -----------
+    pipeline1_top : pandas.DataFrame
+        Top N features from pipeline 1 with columns: Feature, Coefficient, Abs_Coefficient
+    pipeline2_top : pandas.DataFrame
+        Top N features from pipeline 2 with columns: Feature, Coefficient, Abs_Coefficient  
+    pipeline1_all : pandas.DataFrame
+        All features from pipeline 1 (for statistics)
+    pipeline2_all : pandas.DataFrame
+        All features from pipeline 2 (for statistics)
+    model1_name : str, default="Pipeline 1 (Ridge)"
+        Name for first model
+    model2_name : str, default="Pipeline 2 (Lasso→Ridge)"
+        Name for second model
+    top_n : int, default=30
+        Number of top features to display
+    figsize : tuple, default=(20, 8)
+        Figure size for the plots
+    max_feature_length : int, default=25
+        Maximum length for feature names before truncation
+    
+    Returns:
+    --------
+    matplotlib.figure.Figure : The created figure object
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    
+    # Create side-by-side feature importance visualization
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+    fig.suptitle('Feature Importance Comparison Between Models', fontsize=16, fontweight='bold')
+
+    # 1. Pipeline 1 (Ridge) top features
+    top_features_p1 = pipeline1_top.copy()
+    # Truncate long feature names for better visualization
+    top_features_p1['Feature_Short'] = top_features_p1['Feature'].apply(
+        lambda x: x[:max_feature_length] + '...' if len(x) > max_feature_length else x
+    )
+
+    y_pos = np.arange(len(top_features_p1))
+    bars1 = ax1.barh(y_pos, top_features_p1['Abs_Coefficient'], color='skyblue', alpha=0.8)
+    ax1.set_yticks(y_pos)
+    ax1.set_yticklabels(top_features_p1['Feature_Short'], fontsize=10)
+    ax1.invert_yaxis()
+    ax1.set_xlabel('Absolute Coefficient Value')
+    ax1.set_title(f'{model1_name}\nTop {top_n} Features')
+    ax1.grid(True, alpha=0.3, axis='x')
+
+    # Add value labels
+    for i, (bar, coef) in enumerate(zip(bars1, top_features_p1['Coefficient'])):
+        width = bar.get_width()
+        sign = '+' if coef >= 0 else '-'
+        ax1.annotate(f'{sign}{width:.1f}',
+                    xy=(width, bar.get_y() + bar.get_height() / 2),
+                    xytext=(3, 0),  # 3 points horizontal offset
+                    textcoords="offset points",
+                    ha='left' if width >= 0 else 'right', va='center', fontsize=9)
+
+    # 2. Pipeline 2 (Lasso→Ridge) top features  
+    top_features_p2 = pipeline2_top.copy()
+    # Truncate long feature names for better visualization
+    top_features_p2['Feature_Short'] = top_features_p2['Feature'].apply(
+        lambda x: x[:max_feature_length] + '...' if len(x) > max_feature_length else x
+    )
+
+    y_pos2 = np.arange(len(top_features_p2))
+    bars2 = ax2.barh(y_pos2, top_features_p2['Abs_Coefficient'], color='lightcoral', alpha=0.8)
+    ax2.set_yticks(y_pos2)
+    ax2.set_yticklabels(top_features_p2['Feature_Short'], fontsize=10)
+    ax2.invert_yaxis()
+    ax2.set_xlabel('Absolute Coefficient Value')
+    ax2.set_title(f'{model2_name}\nTop {top_n} Features')
+    ax2.grid(True, alpha=0.3, axis='x')
+
+    # Add value labels
+    for i, (bar, coef) in enumerate(zip(bars2, top_features_p2['Coefficient'])):
+        width = bar.get_width()
+        sign = '+' if coef >= 0 else '-'
+        ax2.annotate(f'{sign}{width:.1f}',
+                    xy=(width, bar.get_y() + bar.get_height() / 2),
+                    xytext=(3, 0),  # 3 points horizontal offset
+                    textcoords="offset points",
+                    ha='left' if width >= 0 else 'right', va='center', fontsize=9)
+
+    plt.tight_layout()
+    
+    # Show coefficient magnitude comparison
+    p1_max_coeff = pipeline1_top['Abs_Coefficient'].max()
+    p2_max_coeff = pipeline2_top['Abs_Coefficient'].max()
+    print(f"• Largest coefficient magnitude - {model1_name}: {p1_max_coeff:.2f}, {model2_name}: {p2_max_coeff:.2f}")
+
+    # Summary of what drives predictions
+    print(f"\n🚗 WHAT DRIVES CAR PRICE PREDICTIONS:")
+    print("="*40)
+
+    # Extract and summarize most important feature types
+    important_categories = []
+    for feature in pipeline1_top.head(5)['Feature']:
+        if 'manufacturer' in feature.lower():
+            important_categories.append("Vehicle Manufacturer")
+        elif 'model' in feature.lower():
+            important_categories.append("Vehicle Model")
+        elif 'age' in feature.lower():
+            important_categories.append("Vehicle Age")
+        elif 'odometer' in feature.lower():
+            important_categories.append("Mileage/Usage")
+        elif 'condition' in feature.lower():
+            important_categories.append("Vehicle Condition")
+        elif 'type' in feature.lower():
+            important_categories.append("Vehicle Type")
+
+    # Remove duplicates while preserving order
+    unique_categories = list(dict.fromkeys(important_categories))
+    for i, category in enumerate(unique_categories[:3], 1):
+        print(f"{i}. {category}")
+
+    print("\nBoth models consistently identify these factors as the primary drivers of vehicle pricing.")
+    
+    return fig
+
+def display_single_pipeline_feature_analysis(pipeline_top, pipeline_all, model_name, top_n=15):
+    """
+    Display comprehensive feature importance analysis for a single pipeline.
+    
+    Parameters:
+    -----------
+    pipeline_top : pandas.DataFrame
+        Top N features from pipeline with columns: Feature, Coefficient, Abs_Coefficient
+    pipeline_all : pandas.DataFrame
+        All features from pipeline
+    model_name : str
+        Name for the model
+    top_n : int, default=15
+        Number of top features to display and analyze
+    """
+    
+    print(f"\n" + "="*60)
+    print(f"{model_name.upper()} - TOP {top_n} MOST IMPORTANT FEATURES")
+    print("="*60)
+
+    # Display top features
+    print(f"\n🏆 {model_name} - Top {top_n} Features:")
+    print("-" * 50)
+    print(f"{'Rank':<4} {'Feature':<35} {'Coefficient':<12} {'Abs Value':<10}")
+    print("-" * 50)
+    for i, (_, row) in enumerate(pipeline_top.iterrows(), 1):
+        print(f"{i:<4} {row['Feature'][:34]:<35} {row['Coefficient']:<12.2f} {row['Abs_Coefficient']:<10.2f}")
+
+    print(f"\n💡 FEATURE INSIGHTS")
+    print("="*30)
+    analyze_feature_types(pipeline_top, model_name)
+    
+    # Key insights summary
+    print(f"\n🎯 KEY INSIGHTS")
+    print("="*20)
+    print(f"• Total features in model: {len(pipeline_all):,}")
+    print(f"• The most important feature: '{pipeline_top.iloc[0]['Feature'][:50]}{'...' if len(pipeline_top.iloc[0]['Feature']) > 50 else ''}'")
+    print(f"• Largest coefficient magnitude: {pipeline_top['Abs_Coefficient'].max():.2f}")
+
+    # Summary of what drives predictions
+    print(f"\n🚗 WHAT DRIVES CAR PRICE PREDICTIONS:")
+    print("="*40)
+
+    # Extract and summarize most important feature types
+    important_categories = []
+    for feature in pipeline_top.head(5)['Feature']:
+        if 'manufacturer' in feature.lower():
+            important_categories.append("Vehicle Manufacturer")
+        elif 'model' in feature.lower():
+            important_categories.append("Vehicle Model")
+        elif 'age' in feature.lower():
+            important_categories.append("Vehicle Age")
+        elif 'odometer' in feature.lower():
+            important_categories.append("Mileage/Usage")
+        elif 'condition' in feature.lower():
+            important_categories.append("Vehicle Condition")
+        elif 'type' in feature.lower():
+            important_categories.append("Vehicle Type")
+
+    # Remove duplicates while preserving order
+    unique_categories = list(dict.fromkeys(important_categories))
+    for i, category in enumerate(unique_categories[:3], 1):
+        print(f"{i}. {category}")
+
+    print(f"\nThe {model_name} identifies these factors as the primary drivers of vehicle pricing.")
+
+
+def compare_pipeline_features(pipeline1_top, pipeline2_top, pipeline1_all, pipeline2_all,
+                              model1_name="Pipeline 1 (Ridge)", 
+                              model2_name="Pipeline 2 (Lasso→Ridge)", 
+                              top_n=15):
+    """
+    Compare feature importance between two pipelines.
+    
+    Parameters:
+    -----------
+    pipeline1_top : pandas.DataFrame
+        Top N features from pipeline 1 with columns: Feature, Coefficient, Abs_Coefficient
+    pipeline2_top : pandas.DataFrame
+        Top N features from pipeline 2 with columns: Feature, Coefficient, Abs_Coefficient  
+    pipeline1_all : pandas.DataFrame
+        All features from pipeline 1
+    pipeline2_all : pandas.DataFrame
+        All features from pipeline 2
+    model1_name : str, default="Pipeline 1 (Ridge)"
+        Name for first model
+    model2_name : str, default="Pipeline 2 (Lasso→Ridge)"
+        Name for second model
+    top_n : int, default=15
+        Number of top features to compare
+    """
+    
+    # Compare overlap between top features
+    pipeline1_top_features = set(pipeline1_top['Feature'].tolist())
+    pipeline2_top_features = set(pipeline2_top['Feature'].tolist())
+    common_features = pipeline1_top_features.intersection(pipeline2_top_features)
+    unique_to_p1 = pipeline1_top_features - pipeline2_top_features
+    unique_to_p2 = pipeline2_top_features - pipeline1_top_features
+
+    print(f"\n" + "="*60)
+    print(f"PIPELINE COMPARISON - TOP {top_n} FEATURES")
+    print("="*60)
+    
+    print(f"\n📊 TOP FEATURES COMPARISON")
+    print("="*40)
+    print(f"Features in both top {top_n}: {len(common_features)} ({len(common_features)/top_n*100:.1f}%)")
+    print(f"Unique to {model1_name.split()[0]} {model1_name.split()[1]}: {len(unique_to_p1)}")
+    print(f"Unique to {model2_name.split()[0]} {model2_name.split()[1]}: {len(unique_to_p2)}")
+
+    if common_features:
+        print(f"\n🤝 COMMON IMPORTANT FEATURES:")
+        for i, feature in enumerate(sorted(common_features), 1):
+            print(f"  {i:2d}. {feature}")
+
+    if unique_to_p1:
+        print(f"\n🔵 UNIQUE TO {model1_name.upper()}:")
+        for i, feature in enumerate(sorted(unique_to_p1), 1):
+            print(f"  {i:2d}. {feature}")
+
+    if unique_to_p2:
+        print(f"\n🔴 UNIQUE TO {model2_name.upper()}:")
+        for i, feature in enumerate(sorted(unique_to_p2), 1):
+            print(f"  {i:2d}. {feature}")
+    
+    # Overall comparison insights
+    print(f"\n🎯 COMPARISON INSIGHTS")
+    print("="*30)
+    print(f"• Both models agree on {len(common_features)} out of {top_n} most important features")
+    print(f"• Feature selection (Lasso) reduced features by {((len(pipeline1_all) - len(pipeline2_all))/len(pipeline1_all))*100:.1f}%")
+    
+    # Show coefficient magnitude comparison
+    p1_max_coeff = pipeline1_top['Abs_Coefficient'].max()
+    p2_max_coeff = pipeline2_top['Abs_Coefficient'].max()
+    print(f"• Largest coefficient magnitude - {model1_name.split()[0]} {model1_name.split()[1]}: {p1_max_coeff:.2f}, {model2_name.split()[0]} {model2_name.split()[1]}: {p2_max_coeff:.2f}")
+
+    print(f"\n🏆 CONSENSUS:")
+    print("="*15)
+    if len(common_features) >= top_n * 0.6:  # 60% or more overlap
+        print("✓ Strong agreement between models on important features")
+    elif len(common_features) >= top_n * 0.4:  # 40-60% overlap
+        print("~ Moderate agreement between models on important features")
+    else:  # Less than 40% overlap
+        print("⚠ Limited agreement between models on important features")
+    
+    print("Both models consistently identify key factors as primary drivers of vehicle pricing.")

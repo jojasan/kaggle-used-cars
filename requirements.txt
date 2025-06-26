@@ -9,8 +9,7 @@ seaborn
 
 # ML stack
 scikit-learn            # 1.4 ≤ version < 1.7 is required for sklearn-intelex 2025.5
-# scikit-learn-intelex # pulls the matching daal4py build
-# daal4py              # listed explicitly for clarity; same version as intelex
+# scikit-learn-intelex    # pulls the matching daal4py build
 
 # Stats / econometrics
 statsmodels
