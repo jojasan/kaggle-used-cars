@@ -8,11 +8,11 @@ A data-driven approach to pricing used-car inventory, this project follows the *
 ### 📒 Key Notebooks
 | Notebook | Purpose | Key Take-aways |
 | :--- | :--- | :--- |
-| **`biz_understanding.ipynb`** | Define business goals & success metrics | MAE threshold tied to gross profit; outlines dealership objectives. |
-| **`data_prep.ipynb`** | Data cleaning, EDA, and feature engineering | Retains 73% of data; delivers a modeling-ready frame. |
-| **`modeling.ipynb`** | Baseline & tuned models | Tests RidgeCV vs. Lasso-selected Ridge; implements feature engineering. |
-| **`evaluation.ipynb`** | Hold-out performance & feature insights | R² ≈ 0.64, MAE ≈ $5,000; finds 80% feature-importance overlap. |
-| **`deploy.ipynb`** | Train on full data & demonstrate usage | Production-ready `Pipeline` with 287 features. |
+| **[`biz_understanding.ipynb`](notebooks/biz_understanding.ipynb)** | Define business goals & success metrics | MAE threshold tied to gross profit; outlines dealership objectives. |
+| **[`data_prep.ipynb`](notebooks/data_prep.ipynb)** | Data cleaning, EDA, and feature engineering | Retains 73% of data; delivers a modeling-ready frame. |
+| **[`modeling.ipynb`](notebooks/modeling.ipynb)** | Baseline & tuned models | Tests RidgeCV vs. Lasso-selected Ridge; implements feature engineering. |
+| **[`evaluation.ipynb`](notebooks/evaluation.ipynb)** | Hold-out performance & feature insights | R² ≈ 0.64, MAE ≈ $5,000; finds 80% feature-importance overlap. |
+| **[`deploy.ipynb`](notebooks/deploy.ipynb)** | Train on full data & demonstrate usage | Production-ready `Pipeline` with 287 features. |
 
 **Best pipeline**: *Lasso Feature Selection (α=1.0) → Ridge Regression (α=1.0)*. This hybrid approach uses Lasso to select the most impactful features and Ridge to build a robust, generalizable model on that subset.
 
@@ -60,6 +60,8 @@ pip install -r requirements.txt
 
 ## 💼 1. Business Understanding
 
+> *Associated notebook: [`biz_understanding.ipynb`](notebooks/biz_understanding.ipynb)*
+
 ### Project Motivation
 Used-car prices vary wildly—even for nearly identical vehicles. **Dealerships that price too high lose sales; price too low and they leave money on the table.** Our core business problem is to mitigate this risk.
 
@@ -82,6 +84,9 @@ The primary success metric is a **Mean Absolute Error (MAE) of ≤ $1,600** on a
 ---
 
 ## 📊 2. Data Understanding
+
+> *Associated notebook: [`data_prep.ipynb`](notebooks/data_prep.ipynb)*
+
 The analysis is based on a Kaggle dataset of 426,880 raw vehicle listings. After cleaning, 312,846 unique vehicle records were retained for modeling. The target variable is `price` (USD), and key predictors include vehicle age, odometer reading, manufacturer, model, and condition.
 
 ### Key Data Distributions
@@ -139,6 +144,8 @@ The analysis is based on a Kaggle dataset of 426,880 raw vehicle listings. After
 
 ## 🛠️ 3. Data Preparation
 
+> *Associated notebook: [`data_prep.ipynb`](notebooks/data_prep.ipynb)*
+
 The raw dataset of **426,880 records** was transformed into a clean, modeling-ready dataset of **312,846 records** (73% retention).
 
 ### Key Achievements:
@@ -150,6 +157,8 @@ The raw dataset of **426,880 records** was transformed into a clean, modeling-re
 The final dataset is free of missing values with standardized categories, ready for the modeling phase.
 
 ## 📈 4. Modeling
+
+> *Associated notebook: [`modeling.ipynb`](notebooks/modeling.ipynb)*
 
 ### 🎯 Modeling Approaches Tested
 1. **RidgeCV**: Cross-validated Ridge regression with automatic alpha selection
@@ -193,6 +202,8 @@ This project constructs a sophisticated preprocessing pipeline that transforms r
 
 ## 💯 5. Evaluation
 
+> *Associated notebook: [`evaluation.ipynb`](notebooks/evaluation.ipynb)*
+
 The final model was evaluated on a 20% hold-out test set (62,570 records).
 
 *   **Performance**:
@@ -214,6 +225,8 @@ The model's predictions are generally well-aligned with actual prices, but some 
 ![Sample Predictions & Errors](images/sample_predictions_errors.png)
 
 ## 🚀 6. Deployment
+
+> *Associated notebook: [`deploy.ipynb`](notebooks/deploy.ipynb)*
 
 The final, trained `scikit-learn` pipeline is available in `notebooks/deploy.ipynb`. It is ready to make predictions on new, unseen data. The notebook provides a simple interface to input vehicle details and receive a price estimate.
 
