@@ -86,9 +86,24 @@ The analysis is based on a Kaggle dataset of 426,880 raw vehicle listings. After
 
 ### Key Data Distributions
 
-| Price Distribution | Odometer Distribution | Year Distribution |
-| :---: | :---: | :---: |
-| ![Price Distribution](images/price_histogram.png) | ![Odometer Distribution](images/odometer_histogram.png) | ![Year Distribution](images/year_histogram.png) |
+<p align="center">
+  <strong>Price Distribution</strong>
+</p>
+
+![Price Distribution](images/price_histogram.png)
+
+<p align="center">
+  <strong>Odometer Distribution</strong>
+</p>
+
+![Odometer Distribution](images/odometer_histogram.png)
+
+<p align="center">
+  <strong>Year Distribution</strong>
+</p>
+
+![Year Distribution](images/year_histogram.png)
+
 
 *Outliers were filtered to focus on prices between $1 and $50,000, odometers up to 200,000 miles, and model years from 2005-2023.*
 
@@ -96,15 +111,31 @@ The analysis is based on a Kaggle dataset of 426,880 raw vehicle listings. After
 
 **Manufacturer & Model Counts:** The market is dominated by a few key players. Ford and Chevrolet are the most frequent manufacturers, with the F-150 and Silverado pickups being top models.
 
-| Top Manufacturers | Top Models |
-| :---: | :---: |
-| ![Manufacturer Counts](images/manufacturer_counts.png) | ![Model Counts](images/model_counts.png) |
+<p align="center">
+  <strong>Top Manufacturers</strong>
+</p>
+
+![Manufacturer Counts](images/manufacturer_counts.png)
+
+<p align="center">
+  <strong>Top Models</strong>
+</p>
+
+![Model Counts](images/model_counts.png)
 
 **Vehicle Condition Analysis:** Most vehicles are listed in "Good" or "Excellent" condition. A heatmap reveals that the median price is highly sensitive to both the manufacturer and the vehicle's condition, with premium brands like Porsche and Tesla commanding higher prices across all conditions.
 
-| Condition Distribution | Condition-Manufacturer Price Heatmap |
-| :---: | :---: |
-| ![Condition Distribution](images/condition_distribution.png) | ![Condition-Manufacturer Heatmap](images/condition_manufacturer_heatmap.png) |
+<p align="center">
+  <strong>Condition Distribution</strong>
+</p>
+
+![Condition Distribution](images/condition_distribution.png)
+
+<p align="center">
+  <strong>Condition-Manufacturer Price Heatmap</strong>
+</p>
+
+![Condition-Manufacturer Heatmap](images/condition_manufacturer_heatmap.png)
 
 ## 🛠️ 3. Data Preparation
 
